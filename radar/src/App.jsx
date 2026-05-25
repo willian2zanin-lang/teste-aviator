@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext } from "react";
 
 /* ─────────────────────────────────────────────────────────────────────────
    CSS GLOBAL — injetado via useEffect no <head>
@@ -9,7 +9,7 @@ const CSS = [
   "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#03050d;color:#f0f0f0;font-family:'Nunito',sans-serif}","#root{width:100%;height:100%;margin:0;padding:0}",
   "::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#080c18}::-webkit-scrollbar-thumb{background:#1c2540;border-radius:2px}::-webkit-scrollbar-thumb:hover{background:#d432c8}",
   "@keyframes popIn{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}",
-  "@keyframes glowPink{0%,100%{box-shadow:0 0 10px 2px rgba(220,50,180,.5)}50%{box-shadow:0 0 24px 7px rgba(220,50,180,.85)}}",
+  "@keyframes glowPink{0%,100%{box-shadow:0 0 6px 1px rgba(220,50,180,.35)}50%{box-shadow:0 0 14px 4px rgba(220,50,180,.55)}}",
   "@keyframes rowIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}",
   "@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}",
   "@keyframes gradShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}",
@@ -20,6 +20,220 @@ const CSS = [
   "@keyframes fadeIn{from{opacity:0}to{opacity:1}}",
   "@keyframes slideRight{from{opacity:0;transform:translateX(-30px)}to{opacity:1;transform:translateX(0)}}",
 ].join("\n");
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CONTEXT API — estado centralizado
+───────────────────────────────────────────────────────────────────────── */
+const RadarContext = createContext(null);
+const useRadar = () => useContext(RadarContext);
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PAINEL LATERAL DIREITO — feed contextual de eventos ≥10x
+   Fixo, independente do zoom, com scroll próprio
+───────────────────────────────────────────────────────────────────────── */
+function PainelLateral({ plat }) {
+  const { allLines } = useRadar();
+  const painelRef = useRef(null);
+
+  // Cor verde terminal fosforescente
+  const VERDE       = "#7CFF7C";
+  const VERDE_DIM   = "rgba(124,255,124,0.55)"; // horário — opacidade reduzida
+  const VERDE_TITLE = "rgba(124,255,124,0.35)"; // título
+
+  // Extrair eventos ≥10x — cada linha = 1 bloco contextual
+  const eventos = useMemo(() => {
+    const evts = [];
+    allLines.filter(l => l.hot && !l.open).forEach(line => {
+      const hotCells = line.cells.filter(c => c.multiplier >= 10);
+      if (!hotCells.length) return;
+      evts.push({
+        casas:         hotCells.map(hc => `${hc.casa}°`),
+        multiplicadores: hotCells.map(hc => fmt(hc.multiplier)),
+        horario:       hotCells[hotCells.length - 1].time,
+        count:         hotCells.length,
+      });
+    });
+    return evts; // cronológico — antigo no topo, novo embaixo
+  }, [allLines]);
+
+  // Auto-scroll para o final quando novo evento chega
+  useEffect(() => {
+    if (painelRef.current) {
+      painelRef.current.scrollTop = painelRef.current.scrollHeight;
+    }
+  }, [eventos.length]);
+
+  return (
+    <div style={{
+      position:   "fixed",
+      top: 0, right: 0,
+      width:    "clamp(220px, 22vw, 320px)",
+      minWidth: 220,
+      maxWidth: 320,
+      height:   "100vh",
+      background: "#03070d",
+      borderLeft: `1px solid ${VERDE}18`,
+      display:    "flex",
+      flexDirection: "column",
+      zIndex:     100,
+      fontFamily: "'JetBrains Mono','Fira Code','IBM Plex Mono','Source Code Pro','Share Tech Mono',monospace",
+    }}>
+
+      {/* ── Cabeçalho ── */}
+      <div style={{
+        padding: "12px 14px 10px",
+        borderBottom: `1px solid ${VERDE}18`,
+        flexShrink: 0,
+      }}>
+        <div style={{
+          fontSize: 8, color: VERDE_TITLE,
+          letterSpacing: 3, marginBottom: 2,
+        }}>◈ RADAR · FEED ≥10x</div>
+        <div style={{
+          fontSize: 7, color: VERDE_TITLE,
+          letterSpacing: 1, opacity: .6,
+        }}>{eventos.length} eventos registrados</div>
+      </div>
+
+      {/* ── Lista de blocos com scroll próprio ── */}
+      <div ref={painelRef} style={{
+        flex: 1,
+        overflowY: "auto",
+        padding: "10px 14px",
+        scrollbarWidth: "thin",
+        scrollbarColor: `${VERDE}22 transparent`,
+      }}>
+        {eventos.length === 0 ? (
+          <div style={{
+            color: VERDE_TITLE, fontSize: 8,
+            textAlign: "center", marginTop: 32,
+            lineHeight: 2, letterSpacing: 1,
+          }}>
+            aguardando<br/>eventos ≥10x
+          </div>
+        ) : eventos.map((ev, i) => (
+          <div key={i} style={{
+            marginBottom: 20,
+            paddingBottom: 12,
+            borderBottom: `1px solid ${VERDE}12`,
+          }}>
+            {/* Linha 1 — casas + multiplicadores */}
+            <div style={{
+              fontSize: 14,
+              color: VERDE,
+              letterSpacing: .5,
+              lineHeight: 1.6,
+              marginBottom: 5,
+            }}>
+              <span style={{ opacity:.85 }}>
+                {ev.casas.join("/")}
+              </span>
+              <span style={{ opacity:.4, margin:"0 7px" }}>—</span>
+              <span style={{ opacity:.95 }}>
+                {ev.multiplicadores.join(" / ")}
+              </span>
+            </div>
+
+            {/* Linha 2 — horário com opacidade reduzida */}
+            <div style={{
+              fontSize: 11,
+              color: VERDE_DIM,
+              letterSpacing: 1,
+              paddingLeft: 2,
+            }}>
+              {ev.horario}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Rodapé ── */}
+      <div style={{
+        padding: "8px 14px",
+        borderTop: `1px solid ${VERDE}18`,
+        flexShrink: 0,
+      }}>
+        <div style={{
+          fontSize: 6, color: VERDE_TITLE,
+          letterSpacing: 2, textAlign: "center", opacity: .5,
+        }}>
+          RADAR AVIATOR · CONTEXTUAL
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   RÉGUA DE CASAS — barra fixa inferior 1°→30°
+───────────────────────────────────────────────────────────────────────── */
+function ReguaCasas({ sizeCfg, zoom }) {
+  // Valores idênticos ao GridLine para alinhamento perfeito
+  const casaW   = sizeCfg.px<=72 ? 72 : sizeCfg.px<=96 ? 88 : 108;
+  const gap     = sizeCfg.px<=72 ? 3  : sizeCfg.px<=96 ? 4  : 5;
+  // Mesmo padding horizontal do container do grid
+  const padLeft = 14;
+
+  return (
+    <div style={{
+      flexShrink: 0,
+      background: "#080a14",
+      borderTop: "1px solid #1a1d2a",
+      padding: "5px 0",
+      overflowX: "hidden",
+    }}>
+      {/* Mesmo zoom do grid */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        zoom: zoom,
+        width: `${100/zoom}%`,
+        paddingLeft: padLeft, // compensar padding do grid
+      }}>
+        {/* Espaço idêntico à coluna CASA */}
+        <div style={{ width: casaW, minWidth: casaW, flexShrink:0 }}/>
+
+        {/* Números com divisores visuais */}
+        <div style={{ display:"flex", flex:1 }}>
+          {Array.from({ length: 30 }, (_, i) => i + 1).map((n, idx) => (
+            <div key={n} style={{
+              width:        sizeCfg.px,
+              minWidth:     sizeCfg.px,
+              flexShrink:   0,
+              marginRight:  gap,
+              position:     "relative",
+              display:      "flex",
+              alignItems:   "center",
+              justifyContent: "center",
+            }}>
+              {/* Linha divisória à esquerda de cada coluna */}
+              <div style={{
+                position:   "absolute",
+                left:       0,
+                top:        "15%",
+                bottom:     "15%",
+                width:      1,
+                background: "#1a1d2a",
+              }}/>
+              <span style={{
+                fontFamily:    "'Share Tech Mono',monospace",
+                fontSize:      sizeCfg.px<=72 ? 18 : sizeCfg.px<=96 ? 21 : 26,
+                fontWeight:    700,
+                letterSpacing: 0.3,
+                color:         "#2d3a5a",
+                userSelect:    "none",
+                position:      "relative", // sobre a linha divisória
+                zIndex:        1,
+              }}>
+                {n}°
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    PLATAFORMAS E JOGOS
@@ -37,28 +251,22 @@ const PLATFORMS = [
       {
         id: "apostax_spribe", name: "Aviator Spribe", badge: "SPRIBE",
         icon: "✈", color: "#d432c8", color2: "#7a0090",
-        status: "online", protocol: "socketio",
-        endpoint: "http://localhost:5173", path: "/crtc",
-        event: "Last_ApostaX",
-        fields: { mult: "vela", time: "dataHora" },
+        status: "online", protocol: "gamehack",
+        source: "ApostaX Gráfico 1",
         desc: "Versão original · Spribe",
       },
       {
         id: "apostax_vip", name: "Aviator VIP", badge: "VIP",
         icon: "👑", color: "#f5a623", color2: "#a06010",
-        status: "online", protocol: "socketio",
-        endpoint: "http://localhost:5173", path: "/crtc",
-        event: "Last_ApostaXG2",
-        fields: { mult: "vela", time: "dataHora" },
+        status: "online", protocol: "gamehack",
+        source: "ApostaX Gráfico 2",
         desc: "Versão VIP · ApostaX",
       },
       {
         id: "apostax_premium", name: "Aviator Premium", badge: "PREMIUM",
         icon: "💜", color: "#9c27b0", color2: "#4a0072",
-        status: "online", protocol: "socketio",
-        endpoint: "http://localhost:5173", path: "/crtc",
-        event: "Last_ApostaXG3",
-        fields: { mult: "vela", time: "dataHora" },
+        status: "online", protocol: "gamehack",
+        source: "ApostaX Gráfico 3",
         desc: "Versão Premium · ApostaX",
       },
     ],
@@ -68,9 +276,8 @@ const PLATFORMS = [
     id: "apostatudo", name: "ApostaTudo", domain: "apostatudo.bet",
     color: "#29b6f6", color2: "#0077aa", icon: "💎",
     status: "online", protocol: "socketio",
-    endpoint: "http://localhost:5173", path: "/crtc",
-    event: "Last_ApostaTudo",
-    fields: { mult: "vela", time: "dataHora" },
+    protocol: "gamehack",
+    source: "ApostaTudo Gráfico 1",
     desc: "Aviator · Dados em tempo real",
   },
   // ── ApostaMax — endpoint mapeado, aguarda teste ───────────────────────
@@ -249,14 +456,21 @@ function GameSelectScreen({ plat, onSelect, onBack }) {
    LÓGICA ESTATÍSTICA
 ───────────────────────────────────────────────────────────────────────── */
 function getTier(v) {
-  if (v >= 10) return { bg:"linear-gradient(135deg,#d432c8,#a0009a)", border:"#e060d8", glow:"glowPink 1.6s infinite", isPink:true };
-  if (v >= 2)  return { bg:"linear-gradient(135deg,#7c3aed,#5b21b6)", border:"#9d5bf5", glow:"none", isPink:false };
-  return             { bg:"linear-gradient(135deg,#0ea5e9,#0369a1)", border:"#38bdf8", glow:"none", isPink:false };
+  if (v >= 10) return { bg:"linear-gradient(135deg,#c42ab8,#8a0088)", border:"#d450c8", glow:"glowPink 2.5s infinite", isPink:true,  color:"pink"   };
+  if (v >= 2)  return { bg:"linear-gradient(135deg,#6a30d0,#4a1a9a)", border:"#8a4fe0", glow:"none",                   isPink:false, color:"purple" };
+  return             { bg:"linear-gradient(135deg,#0c90d8,#025888)", border:"#2aaae8",  glow:"none",                   isPink:false, color:"blue"   };
 }
 
 function fmt(v) {
-  if (v >= 1000) return v.toFixed(1);
-  if (v >= 100)  return v.toFixed(1);
+  // Formato exato do game:
+  // < 1000  → ponto decimal apenas:          1.99 / 350.42 / 732.55
+  // >= 1000 → vírgula milhar + ponto decimal: 1,453.54 / 8,745.55 / 35,147.36
+  if (v >= 1000) {
+    // Formata manualmente para garantir independência da localização do SO
+    const parts = v.toFixed(2).split(".");
+    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return intPart + "." + parts[1];
+  }
   return v.toFixed(2);
 }
 
@@ -322,9 +536,15 @@ function genOne() {
   else if (r < .93) v = +(Math.random() * 70   + 30  ).toFixed(2);
   else              v = +(Math.random() * 400  + 100  ).toFixed(2);
   const d = new Date();
+  const tier = getTier(v);
   return {
-    id: _id++, multiplier: v,
-    time: [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2,"0")).join(":"),
+    id:         _id++,
+    multiplier: v,
+    time:       [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2,"0")).join(":"),
+    timestamp:  d.getTime(),
+    house:      "DEMO",
+    color:      tier.color,
+    metadata:   {},
   };
 }
 
@@ -338,9 +558,15 @@ function genBatch(n) {
     else if (r < .93) v = +(Math.random() * 70   + 30  ).toFixed(2);
     else              v = +(Math.random() * 400  + 100  ).toFixed(2);
     const d = new Date(now - (n - i) * 25000);
+    const tier = getTier(v);
     return {
-      id: _id++, multiplier: v,
-      time: [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2,"0")).join(":"),
+      id:         _id++,
+      multiplier: v,
+      time:       [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2,"0")).join(":"),
+      timestamp:  d.getTime(),
+      house:      "DEMO",
+      color:      tier.color,
+      metadata:   {},
     };
   });
 }
@@ -370,7 +596,18 @@ function parseInput(text) {
       const timeStr = lines[i + 1];
       if (isMultStr(multStr) && timeStr && isTimeStr(timeStr)) {
         const mult = parseFloat(multStr);
-        if (mult >= 1 && mult < 100000) rounds.push({ id: id++, multiplier: mult, time: timeStr });
+        if (mult >= 1 && mult < 100000) {
+          const tier = getTier(mult);
+          rounds.push({
+            id:         id++,
+            multiplier: mult,
+            time:       timeStr,
+            timestamp:  null,
+            house:      "",
+            color:      tier.color,
+            metadata:   {},
+          });
+        }
         i += 2;
       } else { i++; }
     }
@@ -395,9 +632,9 @@ function parseInput(text) {
    TAMANHOS DE CÉLULA
 ───────────────────────────────────────────────────────────────────────── */
 const SIZES = [
-  { key: "XXS", px: 34, showGlow: false, radius: 5,  border: "1px" },
-  { key: "XS",  px: 48, showGlow: true,  radius: 8,  border: "1px" },
-  { key: "S",   px: 80, showGlow: true,  radius: 14, border: "2px" },
+  { key: "XXS", px: 72,  showGlow: true,  radius: 8,  border: "1px" },
+  { key: "XS",  px: 96,  showGlow: true,  radius: 10, border: "1px" },
+  { key: "S",   px: 128, showGlow: true,  radius: 14, border: "2px" },
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -406,11 +643,18 @@ const SIZES = [
 function Cell({ round, isNew, sizeCfg }) {
   const t = getTier(round.multiplier);
   const s = sizeCfg.px;
-  const isLarge = round.multiplier >= 100;
-  // Multiplicador dominante (~55% da altura), horário discreto (~20%)
-  const fsMult = s<=34 ? (isLarge?11:13) : s<=48 ? (isLarge?14:17) : s<=80 ? (isLarge?20:24) : (isLarge?26:30);
-  const fsTime = s<=34 ? 7.5 : s<=48 ? 9   : s<=80 ? 11  : 13;
-  const cellH  = s<=34 ? s*0.85 : s<=48 ? s*0.85 : s*0.8; // mais quadrada
+  // Font scaling automático por quantidade de dígitos
+  const digits = fmt(round.multiplier).replace(/[^0-9]/g,"").length;
+  const fsMult = (() => {
+    const base = s <= 72 ? 19 : s <= 96 ? 23 : 28;
+    if (digits <= 4)  return base;
+    if (digits <= 6)  return base - 2;
+    if (digits <= 8)  return base - 4;
+    if (digits <= 10) return base - 5;
+    return base - 6;
+  })();
+  const fsTime = s <= 72 ? 14 : s <= 96 ? 16 : 18;
+  const cellH  = s <= 72 ? s * 0.75 : s <= 96 ? s * 0.72 : s * 0.70;
 
   return (
     <div
@@ -429,18 +673,18 @@ function Cell({ round, isNew, sizeCfg }) {
       onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
     >
       {sizeCfg.showGlow && (
-        <div style={{ position:"absolute", top:0, left:"15%", right:"15%", height:"35%", background:"rgba(255,255,255,.13)", borderRadius:"50%", filter:"blur(5px)", pointerEvents:"none" }}/>
+        <div style={{ position:"absolute", top:0, left:"15%", right:"15%", height:"30%", background:"rgba(255,255,255,.09)", borderRadius:"50%", filter:"blur(4px)", pointerEvents:"none" }}/>
       )}
-      <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:fsMult, fontWeight:900, color:"#fff", lineHeight:1, textShadow:t.isPink?"0 0 10px rgba(255,180,255,.7)":"0 1px 3px rgba(0,0,0,.4)", letterSpacing:s<=48?0:-0.5 }}>
+      <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:fsMult, fontWeight:900, color:"#fff", lineHeight:1, letterSpacing:-0.3, textShadow:t.isPink?"0 0 8px rgba(255,160,255,.5), 0 1px 2px rgba(0,0,0,.6)":"0 1px 3px rgba(0,0,0,.6)" }}>
         {fmt(round.multiplier)}
       </span>
       <span style={{
-        fontFamily:"'Nunito',sans-serif",
-        fontSize: fsTime,
-        fontWeight: 700,
-        lineHeight: 1,
-        color: t.isPink ? "rgba(255,220,255,.95)" : "rgba(255,255,255,.90)",
-        letterSpacing: 0.2,
+        fontFamily:    "'Nunito',sans-serif",
+        fontSize:      fsTime,
+        fontWeight:    700,
+        lineHeight:    1,
+        color:         t.isPink ? "rgba(255,210,255,.92)" : "rgba(255,255,255,.88)",
+        letterSpacing: 0.1,
       }}>
         {round.time}
       </span>
@@ -467,11 +711,11 @@ function GridLine({ line, idx, newestId, sizeCfg, lineLimit }) {
         : `${hotCells[hotCells.length - 1].casa}°`;
 
   const casaColor = isOpen ? "#2d3a5a" : hotCells.length===0 ? "#3d4f72" : isEspelho ? "#f5a623" : "#d432c8";
-  const gap   = sizeCfg.px<=34 ? 2 : sizeCfg.px<=48 ? 3 : 4;
-  const casaW = sizeCfg.px<=34 ? 44 : sizeCfg.px<=48 ? 54 : 68;
+  const gap   = sizeCfg.px<=72 ? 3 : sizeCfg.px<=96 ? 4 : 5;
+  const casaW = sizeCfg.px<=72 ? 72 : sizeCfg.px<=96 ? 88 : 108;
   const casaFs = isEspelho
-    ? (sizeCfg.px<=34 ? 11  : sizeCfg.px<=48 ? 14  : 18)
-    : (sizeCfg.px<=34 ? 14  : sizeCfg.px<=48 ? 17  : 22);
+    ? (sizeCfg.px<=72 ? 14  : sizeCfg.px<=96 ? 16  : 19)
+    : (sizeCfg.px<=72 ? 20  : sizeCfg.px<=96 ? 23  : 28);
 
   // Agrupa pares de casas em linhas (ex: "34°/35°" na 1ª, "36°" na 2ª)
   const casaRows = (() => {
@@ -485,10 +729,22 @@ function GridLine({ line, idx, newestId, sizeCfg, lineLimit }) {
   return (
     <div style={{ display:"flex", alignItems:"center", marginBottom:0, animation:`rowIn .3s ease ${Math.min(idx*.03,.3)}s both` }}>
       {/* Coluna CASA — largura fixa */}
-      <div style={{ width:casaW, minWidth:casaW, maxWidth:casaW, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:4, flexShrink:0, overflow:"hidden" }}>
-        <div style={{ textAlign:"right", lineHeight:1.15 }}>
+      <div style={{ width:casaW, minWidth:casaW, maxWidth:casaW, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:6, flexShrink:0, overflow:"hidden" }}>
+        <div style={{ textAlign:"right", lineHeight:1.1 }}>
           {casaRows.map((row, i) => (
-            <div key={i} style={{ fontFamily:"'Share Tech Mono',monospace", fontSize:casaFs, fontWeight:700, color:casaColor, whiteSpace:"nowrap", textShadow: isEspelho?"0 0 8px rgba(245,166,35,.6)":"none" }}>
+            <div key={i} style={{
+              fontFamily:    "'Share Tech Mono',monospace",
+              fontSize:      casaFs,
+              fontWeight:    700,
+              letterSpacing: 0.3,
+              color:         casaColor,
+              whiteSpace:    "nowrap",
+              textShadow:    isEspelho
+                ? "0 0 10px rgba(245,166,35,.7)"
+                : hotCells.length > 0
+                  ? "0 0 8px rgba(220,50,180,.4)"
+                  : "none",
+            }}>
               {row}
             </div>
           ))}
@@ -595,133 +851,102 @@ function Toast({ msg, color }) {
      "soketi"    → Pusher/Soketi  (LotoGreen)
    Enquanto event/fields.mult forem null, loga todos os eventos para debug.
 ───────────────────────────────────────────────────────────────────────── */
-function useGameSocket(game, onRound, enabled) {
+// ── Carregar histórico via API REST ──────────────────────────────────
+async function loadHistory(source, onRounds) {
+  try {
+    const url = `https://api.gamehack.bet/results?source=${encodeURIComponent(source)}&limits=500`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (!Array.isArray(data)) return;
+    const rounds = data
+      .filter(r => r.multiplier >= 1)
+      .map((r, i) => {
+        const ts   = new Date(r.timestamp);
+        const time = [ts.getHours(), ts.getMinutes(), ts.getSeconds()]
+          .map(n => String(n).padStart(2,"0")).join(":");
+        return { id: Date.now() + i, multiplier: parseFloat(r.multiplier), time };
+      })
+      .reverse(); // mais antigo primeiro
+    if (rounds.length) {
+      onRounds(rounds);
+      console.log(`✅ Histórico carregado: ${rounds.length} rodadas de "${source}"`);
+    }
+  } catch(e) {
+    console.warn("⚠️ Erro ao carregar histórico:", e.message);
+  }
+}
+
+// ── Hook de conexão — protocolo gamehack ─────────────────────────────
+function useGameSocket(game, onRound, onHistory, enabled) {
   const connRef = useRef(null);
 
+  // Carregar histórico ao ativar
   useEffect(() => {
-    if (!enabled || !game) return;
+    if (!enabled || !game?.source) return;
+    loadHistory(game.source, onHistory);
+  }, [enabled, game?.id]);
 
-    function parsePayload(data) {
-      if (!data) return null;
-      const multField = game.fields?.mult;
-      const timeField = game.fields?.time;
-      if (!multField) {
-        console.log("📡 [DEBUG] Payload bruto recebido:", JSON.stringify(data));
-        return null;
-      }
-      const mult = parseFloat(data[multField]);
-      if (isNaN(mult) || mult < 1) return null;
-      // dataHora vem como "23/04/2026, 00:02:17" — extrair só HH:MM:SS
-      const rawTime = data[timeField] || "";
-      const timeMatch = rawTime.match(/(\d{2}:\d{2}:\d{2})/);
-      const time = timeMatch ? timeMatch[1] : new Date().toLocaleTimeString("pt-BR").substring(0,8);
-      return { id: Date.now(), multiplier: mult, time };
-    }
+  // Conectar socket em tempo real
+  useEffect(() => {
+    if (!enabled || !game?.source) return;
 
-    // ── Socket.IO ──────────────────────────────────────────────────────
-    if (game.protocol === "socketio") {
-      const boot = () => {
-        if (!window.io) {
-          const s = document.createElement("script");
-          s.src = "https://cdn.socket.io/4.7.2/socket.io.min.js";
-          s.onload = init;
-          document.head.appendChild(s);
-        } else { init(); }
-      };
-      const init = () => {
-        const socket = window.io(game.endpoint, {
-          path: game.path, transports: ["websocket"],
-          reconnection: true, reconnectionDelay: 3000,
-        });
-        connRef.current = socket;
-        socket.on("connect",       () => console.log("✅ [Socket.IO] Conectado:", game.name, "ID:", socket.id));
-        socket.on("disconnect",    r  => console.warn("❌ [Socket.IO] Desconectado:", r));
-        socket.on("connect_error", e  => console.warn("⚠️ [Socket.IO] Erro:", e.message));
-        if (game.event) {
-          socket.on(game.event, data => {
-            console.log("📥 [Socket.IO] Evento configurado recebido:", game.event, data);
-            const round = parsePayload(data);
-            if (round) onRound(round);
-          });
-        }
-        socket.onAny((evt, data) => {
-          if (evt !== game.event) console.log(`📡 [Socket.IO] Evento desconhecido: "${evt}"`, data);
-        });
-      };
-      boot();
-    }
+    const boot = () => {
+      if (!window.io) {
+        const s = document.createElement("script");
+        s.src = "https://cdn.socket.io/4.7.2/socket.io.min.js";
+        s.onload = init;
+        document.head.appendChild(s);
+      } else { init(); }
+    };
 
-    // ── WebSocket puro ─────────────────────────────────────────────────
-    else if (game.protocol === "websocket") {
-      const url = game.endpoint + (game.path && game.path !== "/" ? game.path : "");
-      let ws, reconnTimer;
-      const connect = () => {
-        ws = new WebSocket(url);
-        connRef.current = ws;
-        ws.onopen  = () => console.log("✅ [WebSocket] Conectado:", game.name, url);
-        ws.onclose = () => { console.warn("❌ [WebSocket] Fechado — reconectando em 3s..."); reconnTimer = setTimeout(connect, 3000); };
-        ws.onerror = e  => console.warn("⚠️ [WebSocket] Erro:", e);
-        ws.onmessage = ({ data: raw }) => {
-          try {
-            const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
-            if (!game.event || !game.fields?.mult) {
-              console.log("📡 [DEBUG WebSocket]:", JSON.stringify(msg));
-              return;
-            }
-            const evt = msg.event || msg.type || msg.action;
-            if (game.event && evt && evt !== game.event) return;
-            const round = parsePayload(msg.data || msg.payload || msg);
-            if (round) onRound(round);
-          } catch(e) {
-            console.log("📡 [DEBUG WebSocket] Raw (não-JSON):", raw);
-          }
-        };
-      };
-      connect();
-      return () => { clearTimeout(reconnTimer); ws?.close(); };
-    }
+    const init = () => {
+      const socket = window.io("https://api.gamehack.bet", {
+        transports: ["websocket"],
+        reconnection: true,
+        reconnectionDelay: 3000,
+      });
+      connRef.current = socket;
 
-    // ── Soketi / Pusher ────────────────────────────────────────────────
-    else if (game.protocol === "soketi") {
-      const boot = () => {
-        if (!window.Pusher) {
-          const s = document.createElement("script");
-          s.src = "https://js.pusher.com/8.4.0/pusher.min.js";
-          s.onload = init;
-          document.head.appendChild(s);
-        } else { init(); }
-      };
-      const init = () => {
-        const pusher = new window.Pusher(game.appKey, {
-          wsHost: game.endpoint, wsPort: game.wsPort||443, wssPort: game.wsPort||443,
-          forceTLS: true, disableStats: true, enabledTransports: ["ws","wss"],
+      socket.on("connect", () =>
+        console.log("✅ [gamehack] Conectado! Escutando:", game.source));
+      socket.on("disconnect", r =>
+        console.warn("❌ [gamehack] Desconectado:", r));
+      socket.on("connect_error", e =>
+        console.warn("⚠️ [gamehack] Erro:", e.message));
+
+      // Evento de resultado final — o que nos interessa
+      socket.on("new_result", (data) => {
+        if (data?.source !== game.source) return; // filtrar por jogo
+        const mult = parseFloat(data.multiplier);
+        if (isNaN(mult) || mult < 1) return;
+        const ts   = new Date(data.timestamp);
+        const time = [ts.getHours(), ts.getMinutes(), ts.getSeconds()]
+          .map(n => String(n).padStart(2,"0")).join(":");
+        const tier = getTier(mult);
+        onRound({
+          id:         data.round_id || Date.now(),
+          multiplier: mult,
+          time,
+          timestamp:  ts.getTime(),
+          house:      data.source || game.source || "",
+          color:      tier.color,
+          metadata:   { round_id: data.round_id || null },
         });
-        connRef.current = pusher;
-        pusher.connection.bind("connected", () => console.log("✅ [Soketi] Conectado:", game.name));
-        pusher.connection.bind("error",     e  => console.warn("⚠️ [Soketi] Erro:", e));
-        const channelName = game.channel || "aviator-channel";
-        const ch = pusher.subscribe(channelName);
-        console.log(`📡 [Soketi] Canal inscrito: "${channelName}"`);
-        if (game.event) {
-          ch.bind(game.event, data => {
-            console.log("📥 [Soketi] Evento recebido:", game.event, data);
-            const round = parsePayload(data);
-            if (round) onRound(round);
-          });
-        }
-        ch.bind_global((evt, data) => {
-          if (evt !== game.event) console.log(`📡 [Soketi] Evento desconhecido: "${evt}"`, data);
-        });
-      };
-      boot();
-    }
+        console.log(`📥 [${game.source}] ${mult}x · ${time} · ID:${data.round_id||"?"}`);
+      });
+
+      // Log de outros eventos para debug
+      socket.onAny((evt, data) => {
+        if (evt !== "new_result" && evt !== "tick" && evt !== "game_state")
+          console.log(`📡 [gamehack] Evento: "${evt}"`, data);
+      });
+    };
+
+    boot();
 
     return () => {
       if (connRef.current) {
-        try {
-          if (typeof connRef.current.disconnect === "function") connRef.current.disconnect();
-          else if (typeof connRef.current.close === "function") connRef.current.close();
-        } catch(e) {}
+        try { connRef.current.disconnect(); } catch(e) {}
         connRef.current = null;
       }
     };
@@ -838,21 +1063,23 @@ function RadarScreen({ plat, onBack }) {
   }, []);
 
   // ── Hook de conexão real ──────────────────────────────────────────────
-  // Garante que o hook use sempre os campos do jogo selecionado
+  // Objeto do jogo para o hook
   const socketGame = useMemo(() => ({
     id:       plat.id,
-    protocol: plat.protocol || "socketio",
-    endpoint: plat.endpoint || "https://sport-iframe.aakvjlhif.com",
-    path:     plat.path     || "/crtc",
-    event:    plat.event,
-    fields:   plat.fields   || { mult:"vela", time:"dataHora" },
-    appKey:   plat.appKey,
-    channel:  plat.channel,
-    wsPort:   plat.wsPort,
+    protocol: plat.protocol || "gamehack",
+    source:   plat.source,
     name:     plat.name,
   }), [plat.id]);
 
-  useGameSocket(socketGame, handleRound, liveReal);
+  // Callback para histórico — substitui os rounds atuais
+  const handleHistory = useCallback((rounds) => {
+    setRounds(rounds);
+    setLastTime(rounds[rounds.length-1]?.time || null);
+    setRestored(true);
+    setTimeout(() => setRestored(false), 3000);
+  }, []);
+
+  useGameSocket(socketGame, handleRound, handleHistory, liveReal);
 
   // ── Demo live ────────────────────────────────────────────────────────
   const toggleLive = useCallback(() => {
@@ -891,26 +1118,46 @@ function RadarScreen({ plat, onBack }) {
   // ── Input manual de rodada ───────────────────────────────────────────
   const handleManualInput = (e) => {
     if (e.key !== "Enter" && e.type !== "click") return;
-    // Aceita: 1.95 / 1,95 / 2,748.76 / 2.748,76
     let raw = inputVal.trim();
-    // Detectar separador decimal: se tem vírgula após ponto → formato PT (2.748,76)
-    if (/\..*,/.test(raw)) {
-      // Formato PT: ponto=milhar, vírgula=decimal
-      raw = raw.replace(/\./g, "").replace(",", ".");
-    } else {
-      // Formato EN ou simples: vírgula=milhar, ponto=decimal
+
+    // Formatos aceitos:
+    // 1.95        → ponto decimal simples
+    // 1,95        → vírgula decimal simples
+    // 8,745.55    → vírgula milhar + ponto decimal (formato do game acima de 1.000)
+    // 51,971.69   → vírgula milhar + ponto decimal
+
+    const temPonto   = raw.includes(".");
+    const temVirgula = raw.includes(",");
+
+    if (temPonto && temVirgula) {
+      // Formato do game: vírgula=milhar, ponto=decimal (8,745.55)
+      // Remove a vírgula de milhar e mantém o ponto decimal
       raw = raw.replace(/,/g, "");
+    } else if (temVirgula && !temPonto) {
+      // Só vírgula: substituir por ponto decimal (1,95 → 1.95)
+      raw = raw.replace(",", ".");
     }
+    // Se só tem ponto: já está correto (1.95)
+
     const mult = parseFloat(raw);
     if (isNaN(mult) || mult < 1 || mult > 100000) {
       setInputError(true);
       setTimeout(() => setInputError(false), 800);
       return;
     }
-    const now = new Date();
+    const now  = new Date();
     const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
       .map(n => String(n).padStart(2, "0")).join(":");
-    const round = { id: Date.now(), multiplier: mult, time };
+    const tier = getTier(mult);
+    const round = {
+      id:         Date.now(),
+      multiplier: mult,
+      time,
+      timestamp:  now.getTime(),
+      house:      "MANUAL",
+      color:      tier.color,
+      metadata:   {},
+    };
     setRounds(p => [...p, round].slice(-5000));
     setLastTime(time);
     setInputVal("");
@@ -928,7 +1175,9 @@ function RadarScreen({ plat, onBack }) {
   const statusColor = liveReal ? "#00e676"   : live ? "#8892ff" : "#3d4f72";
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100vh", width:"100%", maxWidth:"100%", overflow:"hidden", background:"#03050d", animation:"fadeIn .3s ease both", margin:0, padding:0 }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100vh", width:"100%", maxWidth:"100%", overflow:"hidden", background:"#03050d", animation:"fadeIn .3s ease both", margin:0, padding:0,
+
+    }}>
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 14px", height:52, background:"#0d0f15", borderBottom:"1px solid #1e2230", flexShrink:0, position:"relative", overflow:"hidden", gap:10 }}>
@@ -1056,6 +1305,9 @@ function RadarScreen({ plat, onBack }) {
         </div>
       )}
 
+      {/* ── RÉGUA DE CASAS ─────────────────────────────────────────────── */}
+      <ReguaCasas sizeCfg={sizeCfg} zoom={zoom} />
+
       {/* ── BARRA DE INPUT MANUAL ──────────────────────────────────────── */}
       <div style={{
         flexShrink: 0,
@@ -1083,7 +1335,7 @@ function RadarScreen({ plat, onBack }) {
           value={inputVal}
           onChange={e => setInputVal(e.target.value)}
           onKeyDown={handleManualInput}
-          placeholder="ex: 1.95 ou 2,748.76"
+          placeholder="ex: 1.95 · 350.42 · 8,745.55 · 51,971.69"
           autoComplete="off"
           style={{
             flex: 1,
