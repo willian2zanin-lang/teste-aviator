@@ -462,16 +462,17 @@ function getTier(v) {
 }
 
 function fmt(v) {
-  // Formato exato do game:
-  // < 1000  → ponto decimal apenas:          1.99 / 350.42 / 732.55
+  // Formato exato do game — independente do locale do SO/browser:
+  // < 1000  → ponto decimal apenas:           1.99 / 350.42 / 732.55
   // >= 1000 → vírgula milhar + ponto decimal: 1,453.54 / 8,745.55 / 35,147.36
+  const fixed = v.toFixed(2); // sempre usa ponto como decimal
   if (v >= 1000) {
-    // Formata manualmente para garantir independência da localização do SO
-    const parts = v.toFixed(2).split(".");
-    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    return intPart + "." + parts[1];
+    const [intPart, decPart] = fixed.split(".");
+    // Inserir vírgula de milhar manualmente
+    const withCommas = intPart.replace(/(\d)(?=(\d{3})+$)/g, "$1,");
+    return withCommas + "." + decPart;
   }
-  return v.toFixed(2);
+  return fixed;
 }
 
 const LINE_LIMIT = 30;
@@ -973,12 +974,12 @@ function RadarScreen({ plat, onBack }) {
 
   const [sizeKey,   setSizeKey]   = useState("XXS");
   // Detecta dispositivo e define zoom inicial apropriado
-  const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
-    || window.innerWidth < 768;
+  const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    && window.innerWidth < 768;
 
-  const [zoom, setZoom] = useState(() => isMobileDevice ? 0.6 : 1.8);
-  const ZOOM_MIN  = isMobileDevice ? 0.25 : 0.5;
-  const ZOOM_MAX  = isMobileDevice ? 1.6  : 3.0;
+  const [zoom, setZoom] = useState(() => isMobileDevice ? 0.6 : 0.9);
+  const ZOOM_MIN  = isMobileDevice ? 0.25 : 0.6;
+  const ZOOM_MAX  = isMobileDevice ? 1.6  : 1.6;
   const ZOOM_STEP = isMobileDevice ? 0.05 : 0.1;
 
   const [live,      setLive]      = useState(false);
@@ -1214,7 +1215,7 @@ function RadarScreen({ plat, onBack }) {
           <div style={{ display:"flex", alignItems:"center", gap:4 }}>
             <button onClick={() => setZoom(z => +(Math.max(ZOOM_MIN, z - ZOOM_STEP)).toFixed(2))} disabled={zoom<=ZOOM_MIN}
               style={{ width:28, height:26, borderRadius:5, cursor:"pointer", background:"#1a1d24", border:`1px solid ${zoom<=ZOOM_MIN?"#111":"#1e2230"}`, color:zoom<=ZOOM_MIN?"#2a2a2a":"#8892aa", fontSize:16, fontWeight:900, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s" }}>−</button>
-            <div style={{ minWidth:38, textAlign:"center", fontFamily:"'Share Tech Mono',monospace", fontSize:8, color:Math.abs(zoom-(isMobileDevice?0.6:1.8))<0.01?"#3d4f72":plat.color, letterSpacing:1 }}>{Math.round(zoom*100)}%</div>
+            <div style={{ minWidth:38, textAlign:"center", fontFamily:"'Share Tech Mono',monospace", fontSize:8, color:Math.abs(zoom-(isMobileDevice?0.6:0.9))<0.01?"#3d4f72":plat.color, letterSpacing:1 }}>{Math.round(zoom*100)}%</div>
             <button onClick={() => setZoom(z => +(Math.min(ZOOM_MAX, z + ZOOM_STEP)).toFixed(2))} disabled={zoom>=ZOOM_MAX}
               style={{ width:28, height:26, borderRadius:5, cursor:"pointer", background:"#1a1d24", border:`1px solid ${zoom>=ZOOM_MAX?"#111":"#1e2230"}`, color:zoom>=ZOOM_MAX?"#2a2a2a":"#8892aa", fontSize:16, fontWeight:900, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s" }}>+</button>
           </div>
