@@ -957,7 +957,7 @@ function useGameSocket(game, onRound, onHistory, enabled) {
 /* ─────────────────────────────────────────────────────────────────────────
    TELA 3 — RADAR (grid principal + análise)
 ───────────────────────────────────────────────────────────────────────── */
-function RadarScreen({ plat, onBack }) {
+function RadarScreen({ plat, onBack, hideHeader = false }) {
   const storageKey = `radar_rounds_${plat.id}`;
 
   // ── Estado com inicialização a partir do localStorage ────────────────
@@ -1180,15 +1180,17 @@ function RadarScreen({ plat, onBack }) {
 
     }}>
 
-      {/* ── HEADER ─────────────────────────────────────────────────────── */}
+      {/* ── HEADER — sempre visível, botão voltar oculto no modo MultiRadar */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 14px", height:52, background:"#0d0f15", borderBottom:"1px solid #1e2230", flexShrink:0, position:"relative", overflow:"hidden", gap:10 }}>
         <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:`linear-gradient(90deg,transparent,${plat.color},#7c3aed,${plat.color},transparent)`, backgroundSize:"200% 100%", animation:"gradShift 4s linear infinite" }}/>
 
         {/* Voltar + Brand */}
         <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-          <button onClick={onBack} style={{ background:"rgba(255,255,255,.04)", border:"1px solid #1c2540", borderRadius:7, width:30, height:30, cursor:"pointer", color:"#4a5580", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s", flexShrink:0 }}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=plat.color;e.currentTarget.style.color=plat.color;}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor="#1c2540";e.currentTarget.style.color="#4a5580";}}>←</button>
+          {!hideHeader && (
+            <button onClick={onBack} style={{ background:"rgba(255,255,255,.04)", border:"1px solid #1c2540", borderRadius:7, width:30, height:30, cursor:"pointer", color:"#4a5580", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center", transition:"all .15s", flexShrink:0 }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=plat.color;e.currentTarget.style.color=plat.color;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor="#1c2540";e.currentTarget.style.color="#4a5580";}}>←</button>
+          )}
           <div style={{ width:32, height:32, borderRadius:8, background:`linear-gradient(135deg,${plat.color},${plat.color2})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, boxShadow:`0 0 16px ${plat.color}44` }}>{plat.icon}</div>
           <div>
             <div style={{ fontFamily:"'Nunito',sans-serif", fontSize:13, fontWeight:900, letterSpacing:1 }}>{plat.name}</div>
@@ -1403,12 +1405,143 @@ function RadarScreen({ plat, onBack }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   APP ROOT — gerenciamento de navegação (3 níveis)
-   Nível 1: SelectScreen      → seleção de plataforma
-   Nível 2: GameSelectScreen  → seleção de jogo (se plataforma tiver games[])
-   Nível 3: RadarScreen       → grid de análise
+   BARRA DE ABAS — TabBar multi-instância
 ───────────────────────────────────────────────────────────────────────── */
-// RadarAviator Build 2026-04-24
+function TabBar({ plat, games, activeId, onSelect, onBack }) {
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "stretch",
+      background: "#060810",
+      borderBottom: "1px solid #1a1d2a",
+      flexShrink: 0,
+      overflowX: "auto",
+      height: 44,
+    }}>
+      {/* Botão voltar */}
+      <button onClick={onBack} style={{
+        background: "transparent",
+        border: "none",
+        borderRight: "1px solid #1a1d2a",
+        color: "#3d4f72",
+        padding: "0 14px",
+        cursor: "pointer",
+        fontSize: 16,
+        flexShrink: 0,
+        transition: "color .15s",
+      }}
+        onMouseEnter={e => e.currentTarget.style.color = plat.color}
+        onMouseLeave={e => e.currentTarget.style.color = "#3d4f72"}
+      >←</button>
+
+      {/* Logo da plataforma */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        padding: "0 16px",
+        borderRight: "1px solid #1a1d2a",
+        flexShrink: 0,
+      }}>
+        <div style={{ width:24, height:24, borderRadius:6, background:`linear-gradient(135deg,${plat.color},${plat.color2})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12 }}>{plat.icon}</div>
+        <span style={{ fontFamily:"'Nunito',sans-serif", fontSize:12, fontWeight:900, color:"#fff", letterSpacing:.5 }}>{plat.name}</span>
+      </div>
+
+      {/* Abas dos jogos */}
+      {games.map(game => {
+        const isActive = game.id === activeId;
+        return (
+          <button key={game.id} onClick={() => onSelect(game.id)}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "0 18px",
+              background: isActive ? "#0d1020" : "transparent",
+              border: "none",
+              borderRight: "1px solid #1a1d2a",
+              borderBottom: isActive ? `2px solid ${game.color}` : "2px solid transparent",
+              cursor: "pointer",
+              flexShrink: 0,
+              transition: "all .15s",
+              position: "relative",
+            }}
+            onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,.03)"; }}
+            onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+          >
+            {/* Ícone */}
+            <div style={{
+              width: 20, height: 20, borderRadius: 5,
+              background: `linear-gradient(135deg,${game.color},${game.color2||game.color})`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 10,
+              opacity: isActive ? 1 : 0.5,
+              boxShadow: isActive ? `0 0 8px ${game.color}66` : "none",
+              transition: "all .15s",
+            }}>{game.icon}</div>
+
+            {/* Nome */}
+            <span style={{
+              fontFamily: "'Share Tech Mono',monospace",
+              fontSize: 9,
+              letterSpacing: 1,
+              color: isActive ? "#fff" : "#3d4f72",
+              transition: "color .15s",
+              whiteSpace: "nowrap",
+            }}>{game.name}</span>
+
+            {/* Badge ativo */}
+            {isActive && (
+              <div style={{
+                width: 5, height: 5, borderRadius: "50%",
+                background: game.color,
+                animation: "blink 1.5s infinite",
+              }}/>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MULTI-RADAR — gerencia múltiplas instâncias de RadarScreen
+───────────────────────────────────────────────────────────────────────── */
+function MultiRadar({ plat, onBack }) {
+  const games = plat.games || [plat];
+  const [activeId, setActiveId] = useState(games[0]?.id);
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden", background:"#03050d" }}>
+      {/* Barra de abas */}
+      <TabBar
+        plat={plat}
+        games={games}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onBack={onBack}
+      />
+
+      {/* Instâncias — renderiza todas mas só mostra a ativa */}
+      {games.map(game => (
+        <div key={game.id} style={{
+          flex: 1,
+          display: game.id === activeId ? "flex" : "none",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}>
+          <RadarScreen
+            plat={{ ...plat, ...game }}
+            onBack={onBack}
+            hideHeader={true} // header substituído pela TabBar
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   APP ROOT — gerenciamento de navegação
+───────────────────────────────────────────────────────────────────────── */
+// RadarAviator Build 2026-05-25
 export default function App() {
   useEffect(() => {
     const s = document.createElement("style");
@@ -1418,27 +1551,26 @@ export default function App() {
   }, []);
 
   const [activePlat, setActivePlat] = useState(null);
-  const [activeGame, setActiveGame] = useState(null);
 
   if (!activePlat) {
-    return <SelectScreen onSelect={p => { setActivePlat(p); setActiveGame(null); }} />;
+    return <SelectScreen onSelect={p => setActivePlat(p)} />;
   }
 
-  if (activePlat.games && !activeGame) {
+  // Se plataforma tem múltiplos jogos → MultiRadar com abas
+  if (activePlat.games) {
     return (
-      <GameSelectScreen
+      <MultiRadar
         plat={activePlat}
-        onSelect={setActiveGame}
-        onBack={() => { setActivePlat(null); setActiveGame(null); }}
+        onBack={() => setActivePlat(null)}
       />
     );
   }
 
-  const game = activeGame || activePlat;
+  // Plataforma com jogo único → RadarScreen direto
   return (
     <RadarScreen
-      plat={{ ...activePlat, ...game }}
-      onBack={() => { if (activePlat.games) setActiveGame(null); else setActivePlat(null); }}
+      plat={activePlat}
+      onBack={() => setActivePlat(null)}
     />
   );
 }
