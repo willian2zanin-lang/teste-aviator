@@ -1338,7 +1338,7 @@ function RadarScreen({ plat, onBack, hideHeader = false }) {
           value={inputVal}
           onChange={e => setInputVal(e.target.value)}
           onKeyDown={handleManualInput}
-          placeholder="ex: 1.95 · 350.42 · 8,745.55 · 51,971.69"
+          placeholder="ex: 1.99 · 121.88 · 9,234.76 · 72,963.00"
           autoComplete="off"
           style={{
             flex: 1,
